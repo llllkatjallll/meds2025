@@ -19,18 +19,20 @@ let playbackIndex = 0;
 let useRecordedData = true; // Default to using recorded data
 
 const SHAKE_WINDOW = 3000; // Consider shakes in the last 3 seconds
-const SHAKE_THRESHOLD = 20; // Acceleration threshold for shake detection
+const SHAKE_THRESHOLD = 8; // Acceleration threshold for shake detection
 const SHAKE_TIMEOUT = 500; // Time in milliseconds to consider a shake "active"
 const TOGGLE_COOLDOWN = 1000; // Cooldown period for toggle (in milliseconds)
 
 let pg; 
+let pg0;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   textAlign(LEFT, TOP);
   frameRate(30);
   pg = createGraphics(width*20, height);
-  pg.background(230);
+  pg0 = createGraphics(width*20, height);
+  pg0.background(240);
   rope = loadImage("rope1.png");
   startDeviceMotionDetect();
 
@@ -127,7 +129,9 @@ function draw() {
     canvasOffset = constrain(canvasOffset, 0, pg.width - width);
     
     // Draw the graphics buffer with the appropriate offset
+    image(pg0, -canvasOffset, 0);
     image(pg, -canvasOffset, 0);
+    
   }
 }
 
@@ -271,6 +275,22 @@ function translateData(){
     pg.circle(curPosX + 40, curPosY, sizeZ);
   }
  */
+
+
+  // lines based on rotation drawn on pg0, mapped on hsb
+
+/*  push();
+
+
+  let colorRot = map(rotationData.x, 0, 180, 190, 250);
+
+  let h = map(colorRot, -180, 180, 180, 255);
+  pg0.stroke(colorRot);
+  pg0.strokeWeight(8);
+  pg0.line(nr, 0, nr, height);
+
+  pop(); 
+*/
   // PERLIN NOISE vertical besier line
 
  // noiseScale = map( accelerationData.x, - 2, 2, -0.01, 0.01);
@@ -280,18 +300,32 @@ function translateData(){
  if (noiseAccY < treshholdNoise &&  noiseAccY > -treshholdNoise ){
   noiseAccY = 0;
  } 
+
+  
    amplitude = map( noiseAccY, - 4, 4, -200, 200);
 
 
-   let strWidth = map( noiseAccY, - 4, 4, -3, 3);
+   let strWidth = map( noiseAccY, - 10, 10, -4, 4);
    if (strWidth == 0) {
-     strWidth = 0.6; // Set a minimum stroke width
-     amplitude = 40;
+     strWidth = 0.25; // Set a minimum stroke width
+     amplitude = 30;
    }
    //noiseScale = map( accelerationData.y, - 20, 20, -0.01, 0.01);
 
 // Start drawing a shape
-  pg.stroke(0, 0, 255, 100);
+
+if ( noiseAccY > 3){
+  pg.stroke(255, 106, 77); //red
+} else{
+    pg.stroke(0, 0, 255, 190);//blue
+  if (strWidth == 0.25){
+    pg.stroke(153, 187, 204);
+  }
+  
+}
+
+
+
   pg.noFill();
   pg.strokeWeight(strWidth);
   pg.beginShape();
@@ -331,6 +365,21 @@ function handleOrientation(event) {
 
 }
 
+function mousePressed(){
+  drawBox();
+  console.log("press")
+}
+
+let boxColors =[];
+
+
+function drawBox(){
+  print("click");
+  pg0.stroke(255);
+  pg0.fill(255);
+  pg0.rect(nr,height/2-40,200,80);
+}
+
 function handleMotion(event) {
   accelerationData.x = event.acceleration.x;
   accelerationData.y = event.acceleration.y;
@@ -365,6 +414,8 @@ function updateData() {
     isShaken = true;
     lastShakeTime = currentTime;
     shakeHistory.push(lastShakeTime);
+    
+      drawBox();
     
     // Toggle shakeToggle if enough time has passed since last toggle
     if (currentTime - lastToggleTime > TOGGLE_COOLDOWN) {
