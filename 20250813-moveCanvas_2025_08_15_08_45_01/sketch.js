@@ -17,7 +17,6 @@ let displayMode = false;
 let playbackData = [];
 let playbackIndex = 0;
 let useRecordedData = true; // Default to using recorded data
-let toggleDataSourceButton;
 
 const SHAKE_WINDOW = 3000; // Consider shakes in the last 3 seconds
 const SHAKE_THRESHOLD = 20; // Acceleration threshold for shake detection
@@ -99,7 +98,7 @@ function draw() {
        translateData();
     
     // Auto-scroll the canvas when the drawing approaches the right edge
-    let rightmostPos = curPosX + 40; // The rightmost position of our drawing elements
+    let rightmostPos = nr + 40; // The rightmost position of our drawing elements
     
     // Only auto-scroll if we're not manually dragging and moving forward
     if (!isDragging) {
@@ -295,7 +294,7 @@ function translateData(){
   pg.stroke(0, 0, 255, 100);
   pg.noFill();
   pg.strokeWeight(strWidth);
-      pg.beginShape();
+  pg.beginShape();
       
       // Use the center of the canvas as the base x position
       let centerX = nr;
@@ -540,26 +539,7 @@ function touchStarted() {
         touchY <= toggleDataSourceButton.position().y + toggleDataSourceButton.size().height) {
       return; // Touched data source button, don't start dragging
     }
-    
-    // If we're in visualization mode and didn't touch a button, start dragging
-    if (displayMode !== "data") {
-      isDragging = true;
-      dragStartX = touchX;
-      lastDragX = touchX;
-      dragInertia = 0;
-      return false; // Prevent default
-    }
-  }
-}
-
-function touchMoved() {
-  if (isDragging && touches.length === 1) {
-    // Calculate how much to move the canvas
-    let dx = touches[0].x - lastDragX;
-    canvasOffset -= dx;
-    
-    // Make sure we don't scroll beyond the canvas bounds
-    canvasOffset = constrain(canvasOffset, 0, pg.width - width);
+  canvasOffset = constrain(canvasOffset, 0, pg.width - width);
     
     // Update the last position and calculate velocity for inertia
     dragInertia = touches[0].x - lastDragX;
@@ -571,6 +551,7 @@ function touchMoved() {
 
 function touchEnded() {
   isDragging = false;
+  // Autoscroll will resume in draw() when dragging ends
   return false; // Prevent default
 }
 
