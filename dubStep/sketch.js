@@ -1,31 +1,4 @@
-/**
- * 
- * Description: This p5.js sketch demonstrates how to capture and display
- *              device motion and orientation data, including rotation,
- *              acceleration, shake detection, and shake rate.
- * 
- * Usage: 
- * - Run this sketch on a mobile device (Android or iOS)
- * - For iOS, you need to request permission to access motion sensors
- * - Move and rotate your device to see the values change
- * - Shake the device to trigger the shake detection and affect the shake rate
- * 
- * Dependencies: p5.js library
- * 
- * Variables:
- * rotationData: Object - Stores rotation data for X, Y, and Z axes
- * accelerationData: Object - Stores acceleration data for X, Y, and Z axes
- * isShaken: Boolean - Indicates if the device is currently shaken
- * shakeToggle: Boolean - Shake to toggle ON / Shake to toggle OFF
- * lastShakeTime: Number - Timestamp of the last detected shake
- * timeSinceShake: Number - Time elapsed since the last shake in seconds
- * dataReceived: Boolean - Indicates if any sensor data has been received
- * shakeHistory: Array - Stores timestamps of recent shakes
- * shakeRate: Number - Calculates the rate of shakes per second
- *
- * Author : Nick Puckett
- * Created using Github Copilot 
- */
+
 
 let rotationData = { x: null, y: null, z: null };
 let accelerationData = { x: null, y: null, z: null };
@@ -38,60 +11,217 @@ let shakeRate = 0;
 let permissionButton;
 let shakeToggle = false;
 let lastToggleTime = 0;
+let displayMode = false;
+
+// Data playback variables
+let playbackData = [];
+let playbackIndex = 0;
+let useRecordedData = true; // Default to using recorded data
+let toggleDataSourceButton;
 
 const SHAKE_WINDOW = 3000; // Consider shakes in the last 3 seconds
 const SHAKE_THRESHOLD = 20; // Acceleration threshold for shake detection
 const SHAKE_TIMEOUT = 500; // Time in milliseconds to consider a shake "active"
 const TOGGLE_COOLDOWN = 1000; // Cooldown period for toggle (in milliseconds)
 
+let pg; 
+
 function setup() {
   createCanvas(windowWidth, windowHeight);
   textAlign(LEFT, TOP);
-  frameRate(60);
-
+  frameRate(30);
+  pg = createGraphics(width*1.4, height);
+  pg.background(0,0,255);
+  rope = loadImage("rope1.png");
   startDeviceMotionDetect();
+
+  // Load the recorded data file automatically
+  loadJSONFile("sensor_data_1755120523115.json");
+  
+  // Create toggle button for display mode
+  toggleButton = createButton('Switch to Visualization Mode');
+  toggleButton.position(20, windowHeight - 60);
+  toggleButton.style('font-size', '16px');
+  toggleButton.style('padding', '10px 15px');
+  toggleButton.style('background-color', '#4CAF50');
+  toggleButton.style('color', 'white');
+  toggleButton.style('border', 'none');
+  toggleButton.style('border-radius', '4px');
+  toggleButton.mousePressed(toggleDisplayMode);
+  
+  // Toggle data source button
+  let buttonY = windowHeight - 110;
+  let buttonWidth = 180;
+  
+  toggleDataSourceButton = createButton('Use Live Sensors');
+  toggleDataSourceButton.position(20, buttonY);
+  toggleDataSourceButton.style('font-size', '16px');
+  toggleDataSourceButton.style('padding', '10px 15px');
+  toggleDataSourceButton.style('background-color', '#9C27B0');
+  toggleDataSourceButton.style('color', 'white');
+  toggleDataSourceButton.style('border', 'none');
+  toggleDataSourceButton.style('border-radius', '4px');
+  toggleDataSourceButton.style('width', buttonWidth + 'px');
+  toggleDataSourceButton.mousePressed(toggleDataSource);
 }
 
-function startDeviceMotionDetect() {
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    permissionButton = createButton('Click to allow access to sensors');
-    permissionButton.style('font-size', '24px');
-    permissionButton.position(20, 20);
-    permissionButton.mousePressed(requestDevicePermissions);
-  } else {
-    // For browsers that don't require permission (e.g., Android)
-    enableSensors();
-  }
-}
 
-function requestDevicePermissions() {
-  DeviceOrientationEvent.requestPermission()
-    .then(response => {
-      if (response == 'granted') {
-        enableSensors();
-        hidePermissionButton();
-      }
-    })
-    .catch(console.error);
-}
-
-function enableSensors() {
-  window.addEventListener('deviceorientation', handleOrientation);
-  window.addEventListener('devicemotion', handleMotion);
-}
-
-function hidePermissionButton() {
-  if (permissionButton) {
-    permissionButton.remove();
-  }
-}
+let doOnceMode = false;
+let canvasOffset = 0;
+let autoScrollSpeed = 2; // Speed at which canvas scrolls when needed
+let canvasViewportMargin = 100; // Start scrolling when we're this close to the edge
+let isDragging = false;
+let dragStartX = 0;
+let lastDragX = 0;
+let dragInertia = 0; // For momentum-based scrolling
+let inertiaDecay = 0.95; // How quickly inertia decreases
 
 function draw() {
-  //background(220);
+  
   updateData();
-  //displayData();
-  translateData();
+
+  if (displayMode === "data") {
+    displayData();
+    doOnceMode = true;
+  } else {
+    if (doOnceMode){
+      //pg.background(240);
+      doOnceMode = false;
+    }
+    
+    // Check if we've reached the canvas edge before drawing more elements
+    if (curPosX < pg.width - 100) { // Leave some margin before stopping
+      translateData();
+      //horizontalMode();
+    }
+    
+    // Auto-scroll the canvas when the drawing approaches the right edge
+    let rightmostPos = curPosX + 40; // The rightmost position of our drawing elements
+    
+    // Only auto-scroll if we're not manually dragging and moving forward
+    if (!isDragging) {
+      // Check if drawing is getting close to the right edge of the visible area
+      if (rightmostPos > width + canvasOffset - canvasViewportMargin && dragInertia <= 0) {
+        // Move the canvas view to keep the drawing in view
+        canvasOffset += autoScrollSpeed;
+      }
+      
+      // Apply inertia if present (for momentum-based scrolling)
+      if (abs(dragInertia) > 0.5) {
+        canvasOffset -= dragInertia;
+        
+        // Decay inertia more quickly when scrolling left (positive dragInertia)
+        if (dragInertia > 0) {
+          dragInertia *= 0.9; // Quicker decay for leftward motion
+        } else {
+          dragInertia *= inertiaDecay;
+        }
+      } else {
+        dragInertia = 0;
+      }
+    }
+    
+    // Make sure we don't scroll beyond the canvas bounds
+    canvasOffset = constrain(canvasOffset, 0, pg.width - width);
+    
+    // Draw the graphics buffer with the appropriate offset
+    image(pg, -canvasOffset, 0);
+  }
 }
+
+//***************HORIZONTAL
+
+// Velocity storage
+let vx = 0, vy = 0, vz = 0;
+
+// Low-pass filter memory (for gravity estimation)
+let gravityX = 0, gravityY = 0, gravityZ = 0;
+
+// Filtering constant (0 < alpha < 1, lower = smoother)
+let alpha = 0.1;
+
+// Damping to reduce drift
+let damping = 0.98;
+
+
+
+function horizontalMode(){
+  let dt = deltaTime / 1000; // convert ms to seconds
+
+  let speed = getFilteredSpeed(
+    accelerationData.x,
+    accelerationData.y,
+    accelerationData.z,
+    dt
+  );
+ nr = nr + 3;
+
+
+  pg.image(rope,nr,50,accelerationData.y*40,accelerationData.y*40);
+  //pg.circle(nr,50,speed*100);
+  
+  console.log("Speed " + speed.toFixed(2)); // in m/s
+}
+
+function getFilteredSpeed(ax, ay, az, dt) {
+  // --- Step 1: Low-pass filter to estimate gravity ---
+  gravityX = alpha * gravityX + (1 - alpha) * ax;
+  gravityY = alpha * gravityY + (1 - alpha) * ay;
+  gravityZ = alpha * gravityZ + (1 - alpha) * az;
+
+  // --- Step 2: Remove gravity ---
+  let linearAx = ax - gravityX;
+  let linearAy = ay - gravityY;
+  let linearAz = az - gravityZ;
+
+  // --- Step 3: Integrate into velocity ---
+  vx += linearAx * dt;
+  vy += linearAy * dt;
+  vz += linearAz * dt;
+
+  // --- Step 4: Apply damping ---
+  vx *= damping;
+  vy *= damping;
+  vz *= damping;
+
+  // --- Step 5: Return magnitude of velocity ---
+  return Math.sqrt(vx * vx + vy * vy + vz * vz);
+}
+
+//*************** CIRCULAR
+
+let angle = 0; // Global variable to track spiral angle
+let radius = 0; // Initial radius for the spiral
+let angleAdd = 0.1;
+
+let nr = 0;
+
+let rope;
+
+function circularStructure(){
+  
+  nr = nr + 5;
+  //calculate spiral pos
+  
+
+  
+  //draw element
+  //circle(x,y,5);
+  
+
+  pg.image(rope,nr,50,20,20);
+  angle += angleAdd;
+  //angleAdd = angleAdd - 0.00002
+
+
+   if (deviceShaken()) {
+    // image(rope,0,0,imgSize,imgSize);
+   }
+  radius -= 0.1;
+  
+}
+
+
 
 // ********** CREATIVE PART HERE //
 
@@ -100,6 +230,8 @@ let curPosY = 0;
 let distanceX = 60;
 let distanceY = 5;
 
+let speed = 0;
+let altitude = 0;
 
 
 function translateData(){
@@ -125,11 +257,11 @@ function translateData(){
   
   if (accelerationData.x > 0.2 ||  accelerationData.x < -0.2 ){
     stroke(0,0,255)
-    circle(curPosX, curPosY, sizeX);
+    pg.circle(curPosX, curPosY, sizeX);
     stroke(255,0,0)
-    circle(curPosX + 20, curPosY, sizeY);
+    pg.circle(curPosX + 20, curPosY, sizeY);
     stroke(0,255,0)
-    circle(curPosX + 40, curPosY, sizeZ);
+    pg.circle(curPosX + 40, curPosY, sizeZ);
   }
   
   
@@ -151,8 +283,25 @@ function handleMotion(event) {
 
 function updateData() {
   if (!dataReceived) return;
-
+  
   const currentTime = millis();
+  
+  // If using recorded data, update sensor values from recording
+  if (useRecordedData && playbackData.length > 0) {
+    if (playbackIndex >= playbackData.length) {
+      playbackIndex = 0; // Loop playback
+    }
+    
+    let dataPoint = playbackData[playbackIndex];
+    rotationData.x = dataPoint.rotation.x;
+    rotationData.y = dataPoint.rotation.y;
+    rotationData.z = dataPoint.rotation.z;
+    accelerationData.x = dataPoint.acceleration.x;
+    accelerationData.y = dataPoint.acceleration.y;
+    accelerationData.z = dataPoint.acceleration.z;
+    
+    playbackIndex++;
+  }
 
   // Update shake data
   if (deviceShaken()) {
@@ -177,6 +326,7 @@ function updateData() {
 }
 
 function displayData() {
+  background(220);
   let yPos = 20;
   const lineHeight = 20;
 
@@ -221,7 +371,25 @@ function displayData() {
   yPos += lineHeight * 1.5;
 
   // Display shake toggle status
-  text("Shake Toggle: " + (shakeToggle ? "ON" : "OFF"), 20, yPos);
+  text("Shake Toggle: " + (shakeToggle), 20, yPos);
+  
+  //
+  
+  let dt = deltaTime / 1000; // convert ms to seconds
+
+  let speed = getFilteredSpeed(
+    accelerationData.x,
+    accelerationData.y,
+    accelerationData.z,
+    dt
+  );
+  
+   yPos += lineHeight * 1.5;
+
+  // Display shake toggle status
+  text("Speed: " + (speed ), 20, yPos);
+  
+  
 }
 
 function deviceShaken() {
@@ -240,4 +408,156 @@ function formatValue(value) {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+}
+
+// Mouse events for drag/pan functionality
+function mousePressed() {
+  // Check if we clicked on a button first
+  if (mouseX >= toggleButton.position().x && 
+      mouseX <= toggleButton.position().x + toggleButton.size().width &&
+      mouseY >= toggleButton.position().y &&
+      mouseY <= toggleButton.position().y + toggleButton.size().height) {
+    return; // Clicked on toggle button, don't start dragging
+  }
+  
+  if (mouseX >= toggleDataSourceButton.position().x && 
+      mouseX <= toggleDataSourceButton.position().x + toggleDataSourceButton.size().width &&
+      mouseY >= toggleDataSourceButton.position().y &&
+      mouseY <= toggleDataSourceButton.position().y + toggleDataSourceButton.size().height) {
+    return; // Clicked on data source button, don't start dragging
+  }
+  
+  // If we're in visualization mode and didn't click a button, start dragging
+  if (displayMode !== "data") {
+    isDragging = true;
+    dragStartX = mouseX;
+    lastDragX = mouseX;
+    dragInertia = 0;
+    cursor('grab');
+  }
+}
+
+function mouseDragged() {
+  if (isDragging) {
+    // Calculate how much to move the canvas
+    let dx = mouseX - lastDragX;
+    canvasOffset -= dx;
+    
+    // Make sure we don't scroll beyond the canvas bounds
+    canvasOffset = constrain(canvasOffset, 0, pg.width - width);
+    
+    // Update the last position and calculate velocity for inertia
+    dragInertia = mouseX - lastDragX;
+    lastDragX = mouseX;
+    
+    cursor('grabbing');
+  }
+}
+
+function mouseReleased() {
+  isDragging = false;
+  cursor(ARROW);
+}
+
+// Touch events (for mobile)
+function touchStarted() {
+  // Don't process touch events if we touched a button
+  // Check if we touched on a button first
+  if (touches.length === 1) {
+    let touchX = touches[0].x;
+    let touchY = touches[0].y;
+    
+    // Check for toggle button touch
+    if (touchX >= toggleButton.position().x && 
+        touchX <= toggleButton.position().x + toggleButton.size().width &&
+        touchY >= toggleButton.position().y &&
+        touchY <= toggleButton.position().y + toggleButton.size().height) {
+      return; // Touched toggle button, don't start dragging
+    }
+    
+    // Check for data source button touch
+    if (touchX >= toggleDataSourceButton.position().x && 
+        touchX <= toggleDataSourceButton.position().x + toggleDataSourceButton.size().width &&
+        touchY >= toggleDataSourceButton.position().y &&
+        touchY <= toggleDataSourceButton.position().y + toggleDataSourceButton.size().height) {
+      return; // Touched data source button, don't start dragging
+    }
+    
+    // If we're in visualization mode and didn't touch a button, start dragging
+    if (displayMode !== "data") {
+      isDragging = true;
+      dragStartX = touchX;
+      lastDragX = touchX;
+      dragInertia = 0;
+      return false; // Prevent default
+    }
+  }
+}
+
+function touchMoved() {
+  if (isDragging && touches.length === 1) {
+    // Calculate how much to move the canvas
+    let dx = touches[0].x - lastDragX;
+    canvasOffset -= dx;
+    
+    // Make sure we don't scroll beyond the canvas bounds
+    canvasOffset = constrain(canvasOffset, 0, pg.width - width);
+    
+    // Update the last position and calculate velocity for inertia
+    dragInertia = touches[0].x - lastDragX;
+    lastDragX = touches[0].x;
+    
+    return false; // Prevent default
+  }
+}
+
+function touchEnded() {
+  isDragging = false;
+  return false; // Prevent default
+}
+
+function startDeviceMotionDetect() {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    permissionButton = createButton('Click to allow access to sensors');
+    permissionButton.style('font-size', '24px');
+    permissionButton.position(20, 20);
+    permissionButton.mousePressed(requestDevicePermissions);
+  } else {
+    // For browsers that don't require permission (e.g., Android)
+    enableSensors();
+  }
+}
+
+function requestDevicePermissions() {
+  DeviceOrientationEvent.requestPermission()
+    .then(response => {
+      if (response == 'granted') {
+        enableSensors();
+        hidePermissionButton();
+      }
+    })
+    .catch(console.error);
+}
+
+function enableSensors() {
+  window.addEventListener('deviceorientation', handleOrientation);
+  window.addEventListener('devicemotion', handleMotion);
+}
+
+function hidePermissionButton() {
+  if (permissionButton) {
+    permissionButton.remove();
+  }
+}
+
+function toggleDisplayMode() {
+  if (displayMode === "data") {
+    displayMode = "translate";
+    toggleButton.html('Switch to Data Mode');
+    toggleButton.style('background-color', '#2196F3');
+  } else {
+    displayMode = "data";
+    toggleButton.html('Switch to Visualization Mode');
+    toggleButton.style('background-color', '#4CAF50');
+  }
 }
