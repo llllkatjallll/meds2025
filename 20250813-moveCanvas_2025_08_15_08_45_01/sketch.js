@@ -16,12 +16,12 @@ let displayMode = false;
 // Data playback variables
 let playbackData = [];
 let playbackIndex = 0;
-let useRecordedData = true; // Default to using recorded data
+let useRecordedData = false; // Default to using recorded data
 
 const SHAKE_WINDOW = 3000; // Consider shakes in the last 3 seconds
 const SHAKE_THRESHOLD = 8; // Acceleration threshold for shake detection
 const SHAKE_TIMEOUT = 500; // Time in milliseconds to consider a shake "active"
-const TOGGLE_COOLDOWN = 1000; // Cooldown period for toggle (in milliseconds)
+const TOGGLE_COOLDOWN = 6000; // Cooldown period for toggle (in milliseconds)
 
 let pg; 
 let pg0;
@@ -29,9 +29,9 @@ let pg0;
 function setup() {
   createCanvas(windowWidth, windowHeight);
   textAlign(LEFT, TOP);
-  frameRate(30);
-  pg = createGraphics(width*20, height);
-  pg0 = createGraphics(width*20, height);
+  frameRate(20);
+  pg = createGraphics(width*10, height);
+  pg0 = createGraphics(width*10, height);
   pg0.background(240);
   rope = loadImage("rope1.png");
   startDeviceMotionDetect();
@@ -39,31 +39,7 @@ function setup() {
   // Load the recorded data file automatically
   loadJSONFile("sensor_data_1755120523115.json");
   
-  // Create toggle button for display mode
-  toggleButton = createButton('Switch to Visualization Mode');
-  toggleButton.position(20, windowHeight - 60);
-  toggleButton.style('font-size', '16px');
-  toggleButton.style('padding', '10px 15px');
-  toggleButton.style('background-color', '#4CAF50');
-  toggleButton.style('color', 'white');
-  toggleButton.style('border', 'none');
-  toggleButton.style('border-radius', '4px');
-  toggleButton.mousePressed(toggleDisplayMode);
   
-  // Toggle data source button
-  let buttonY = windowHeight - 110;
-  let buttonWidth = 180;
-  
-  toggleDataSourceButton = createButton('Use Live Sensors');
-  toggleDataSourceButton.position(20, buttonY);
-  toggleDataSourceButton.style('font-size', '16px');
-  toggleDataSourceButton.style('padding', '10px 15px');
-  toggleDataSourceButton.style('background-color', '#9C27B0');
-  toggleDataSourceButton.style('color', 'white');
-  toggleDataSourceButton.style('border', 'none');
-  toggleDataSourceButton.style('border-radius', '4px');
-  toggleDataSourceButton.style('width', buttonWidth + 'px');
-  toggleDataSourceButton.mousePressed(toggleDataSource);
 }
 
 
@@ -266,15 +242,15 @@ function translateData(){
   
   noFill();
   
-/*   if (accelerationData.x > 0.2 ||  accelerationData.x < -0.2 ){
-    stroke(0,0,255)
+ /*  if (accelerationData.x > 0.2 ||  accelerationData.x < -0.2 ){
+    pg.stroke(0,0,255)
     pg.circle(curPosX, curPosY, sizeX);
-    stroke(255,0,0)
+    pg.stroke(255,0,0)
     pg.circle(curPosX + 20, curPosY, sizeY);
-    stroke(0,255,0)
+    pg.stroke(0,255,0)
     pg.circle(curPosX + 40, curPosY, sizeZ);
-  }
- */
+  }*/
+ 
 
 
   // lines based on rotation drawn on pg0, mapped on hsb
@@ -333,15 +309,13 @@ if ( noiseAccY > 3){
       // Use the center of the canvas as the base x position
       let centerX = nr;
 
-      // Loop through the height of the canvas to draw the vertical line
-      for (let y = 0; y < height; y++) {
+      // Loop through the height of the canvas to draw the vertical line (step by 4 for performance)
+      for (let y = 0; y < height; y += 4) {
         // Calculate the noise value for this point
         // The noise is based on the vertical position (y) and a time offset (noiseOffset)
         let noiseVal = noise((y * noiseScale), noiseOffset);
-        
         // Map the noise value (from 0-1) to the desired amplitude range
         let x = map(noiseVal, 0, 1, centerX - amplitude, centerX + amplitude);
-        
         // Add a vertex to the shape at the calculated x and current y
         pg.vertex(x, y);
       }
@@ -370,14 +344,44 @@ function mousePressed(){
   console.log("press")
 }
 
-let boxColors =[];
+// orange, marine blue, red, grey, darkblue
+
+let boxColors =["#FFA500", "#0077BE", "#FF0000", "#808080", "#00008B"];
 
 
 function drawBox(){
   print("click");
   pg0.stroke(255);
   pg0.fill(255);
-  pg0.rect(nr,height/2-40,200,80);
+  // depending on shake strengh, draw multiple boxes#
+  // devide the hight in 10 possible segments and draw x amount of boxes depending on shake strength
+  let numSegments = 60;
+  let maxBoxes = 12;
+  let boxWidth = 25;
+  let segmentHeight = height / numSegments;
+  let numBoxes = floor(map(shakeStrength, 0, 1, 1, maxBoxes));
+
+  console.log("Number of boxes to draw: " + numBoxes);
+
+  for (let i = 0; i < numBoxes; i++) {
+    // random color from the color array
+    // the position should be random (segmentheight * random(0,numSegments))
+    let posY = segmentHeight * floor(random(numSegments));
+    // boxes x-pos should be in 40px steps. calculate the right x position. divide nr by 40
+    let posX = floor(nr / boxWidth) * boxWidth;
+
+
+    // decide randomly to draw the box on pg0 or pg
+    if (random() < 0.5) {
+      pg0.fill(boxColors[floor(random(boxColors.length))]);
+      pg0.noStroke();
+      pg0.rect(posX, posY, boxWidth, segmentHeight);
+    } else {
+      pg.noStroke();
+      pg.fill(boxColors[floor(random(boxColors.length))]);
+      pg.rect(posX, posY, boxWidth, segmentHeight);
+    }
+  }
 }
 
 function handleMotion(event) {
@@ -414,9 +418,15 @@ function updateData() {
     isShaken = true;
     lastShakeTime = currentTime;
     shakeHistory.push(lastShakeTime);
-    
-      drawBox();
-    
+
+    // calculate shake strength
+    shakeStrength = map(abs(accelerationData.x), 0, SHAKE_THRESHOLD, 0, 1);
+    shakeStrength = constrain(shakeStrength, 0, 1);
+
+    console.log("Shake detected! Strength: " + shakeStrength);
+
+    drawBox();
+
     // Toggle shakeToggle if enough time has passed since last toggle
     if (currentTime - lastToggleTime > TOGGLE_COOLDOWN) {
       shakeToggle = !shakeToggle;
@@ -520,20 +530,6 @@ function windowResized() {
 
 // Mouse events for drag/pan functionality
 function mousePressed() {
-  // Check if we clicked on a button first
-  if (mouseX >= toggleButton.position().x && 
-      mouseX <= toggleButton.position().x + toggleButton.size().width &&
-      mouseY >= toggleButton.position().y &&
-      mouseY <= toggleButton.position().y + toggleButton.size().height) {
-    return; // Clicked on toggle button, don't start dragging
-  }
-  
-  if (mouseX >= toggleDataSourceButton.position().x && 
-      mouseX <= toggleDataSourceButton.position().x + toggleDataSourceButton.size().width &&
-      mouseY >= toggleDataSourceButton.position().y &&
-      mouseY <= toggleDataSourceButton.position().y + toggleDataSourceButton.size().height) {
-    return; // Clicked on data source button, don't start dragging
-  }
   
   // If we're in visualization mode and didn't click a button, start dragging
   if (displayMode !== "data") {
@@ -575,21 +571,6 @@ function touchStarted() {
     let touchX = touches[0].x;
     let touchY = touches[0].y;
     
-    // Check for toggle button touch
-    if (touchX >= toggleButton.position().x && 
-        touchX <= toggleButton.position().x + toggleButton.size().width &&
-        touchY >= toggleButton.position().y &&
-        touchY <= toggleButton.position().y + toggleButton.size().height) {
-      return; // Touched toggle button, don't start dragging
-    }
-    
-    // Check for data source button touch
-    if (touchX >= toggleDataSourceButton.position().x && 
-        touchX <= toggleDataSourceButton.position().x + toggleDataSourceButton.size().width &&
-        touchY >= toggleDataSourceButton.position().y &&
-        touchY <= toggleDataSourceButton.position().y + toggleDataSourceButton.size().height) {
-      return; // Touched data source button, don't start dragging
-    }
   canvasOffset = constrain(canvasOffset, 0, pg.width - width);
     
     // Update the last position and calculate velocity for inertia

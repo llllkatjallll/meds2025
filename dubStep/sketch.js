@@ -16,22 +16,23 @@ let displayMode = false;
 // Data playback variables
 let playbackData = [];
 let playbackIndex = 0;
-let useRecordedData = true; // Default to using recorded data
-let toggleDataSourceButton;
+let useRecordedData = false; // Default to using recorded data
 
 const SHAKE_WINDOW = 3000; // Consider shakes in the last 3 seconds
-const SHAKE_THRESHOLD = 20; // Acceleration threshold for shake detection
+const SHAKE_THRESHOLD = 8; // Acceleration threshold for shake detection
 const SHAKE_TIMEOUT = 500; // Time in milliseconds to consider a shake "active"
-const TOGGLE_COOLDOWN = 1000; // Cooldown period for toggle (in milliseconds)
+const TOGGLE_COOLDOWN = 6000; // Cooldown period for toggle (in milliseconds)
 
 let pg; 
+let pg0;
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   textAlign(LEFT, TOP);
-  frameRate(30);
-  pg = createGraphics(width*1.4, height);
-  pg.background(0,0,255);
+  frameRate(20);
+  pg = createGraphics(width*10, height);
+  pg0 = createGraphics(width*10, height);
+  pg0.background(240);
   rope = loadImage("rope1.png");
   startDeviceMotionDetect();
 
@@ -90,13 +91,16 @@ function draw() {
     }
     
     // Check if we've reached the canvas edge before drawing more elements
-    if (curPosX < pg.width - 100) { // Leave some margin before stopping
-      translateData();
+  /*   if (curPosX < pg.width - 100) { // Leave some margin before stopping
+     
       //horizontalMode();
-    }
+    } */
+
+      nr = nr + 1;
+       translateData();
     
     // Auto-scroll the canvas when the drawing approaches the right edge
-    let rightmostPos = curPosX + 40; // The rightmost position of our drawing elements
+    let rightmostPos = nr + 40; // The rightmost position of our drawing elements
     
     // Only auto-scroll if we're not manually dragging and moving forward
     if (!isDragging) {
@@ -125,7 +129,9 @@ function draw() {
     canvasOffset = constrain(canvasOffset, 0, pg.width - width);
     
     // Draw the graphics buffer with the appropriate offset
+    image(pg0, -canvasOffset, 0);
     image(pg, -canvasOffset, 0);
+    
   }
 }
 
@@ -154,7 +160,7 @@ function horizontalMode(){
     accelerationData.z,
     dt
   );
- nr = nr + 3;
+
 
 
   pg.image(rope,nr,50,accelerationData.y*40,accelerationData.y*40);
@@ -199,8 +205,7 @@ let nr = 0;
 let rope;
 
 function circularStructure(){
-  
-  nr = nr + 5;
+
   //calculate spiral pos
   
 
@@ -233,6 +238,12 @@ let distanceY = 5;
 let speed = 0;
 let altitude = 0;
 
+//perlin
+
+    let noiseOffset = 0; // Controls the movement of the wobble over time
+    let amplitude = 100; // Controls the maximum width of the wobble
+    let noiseScale = 0.003; // Controls the "smoothness" of the noise
+
 
 function translateData(){
   let yPos = 30;
@@ -255,23 +266,146 @@ function translateData(){
   
   noFill();
   
-  if (accelerationData.x > 0.2 ||  accelerationData.x < -0.2 ){
-    stroke(0,0,255)
+ /*  if (accelerationData.x > 0.2 ||  accelerationData.x < -0.2 ){
+    pg.stroke(0,0,255)
     pg.circle(curPosX, curPosY, sizeX);
-    stroke(255,0,0)
+    pg.stroke(255,0,0)
     pg.circle(curPosX + 20, curPosY, sizeY);
-    stroke(0,255,0)
+    pg.stroke(0,255,0)
     pg.circle(curPosX + 40, curPosY, sizeZ);
+  }*/
+ 
+
+
+  // lines based on rotation drawn on pg0, mapped on hsb
+
+/*  push();
+
+
+  let colorRot = map(rotationData.x, 0, 180, 190, 250);
+
+  let h = map(colorRot, -180, 180, 180, 255);
+  pg0.stroke(colorRot);
+  pg0.strokeWeight(8);
+  pg0.line(nr, 0, nr, height);
+
+  pop(); 
+*/
+  // PERLIN NOISE vertical besier line
+
+ // noiseScale = map( accelerationData.x, - 2, 2, -0.01, 0.01);
+
+ let treshholdNoise = 2;
+  let noiseAccY = accelerationData.y;
+ if (noiseAccY < treshholdNoise &&  noiseAccY > -treshholdNoise ){
+  noiseAccY = 0;
+ } 
+
+  
+   amplitude = map( noiseAccY, - 4, 4, -300, 300);
+
+
+   let strWidth = map( noiseAccY, - 6, 6, -5, 5);
+   if (strWidth == 0) {
+     strWidth = 0.25; // Set a minimum stroke width
+     amplitude = 30;
+   }
+   //noiseScale = map( accelerationData.y, - 20, 20, -0.01, 0.01);
+
+// Start drawing a shape
+
+if ( noiseAccY > 3){
+  pg.stroke(255, 106, 77); //red
+} else{
+    pg.stroke(0, 0, 255, 190);//blue
+  if (strWidth == 0.25){
+    pg.stroke(0, 0, 255, 90);//blue
   }
   
-  
 }
+
+
+
+  pg.noFill();
+  pg.strokeWeight(strWidth);
+  pg.beginShape();
+      
+      // Use the center of the canvas as the base x position
+      let centerX = nr;
+
+      // Loop through the height of the canvas to draw the vertical line (step by 4 for performance)
+      for (let y = 0; y < height; y += 4) {
+        // Calculate the noise value for this point
+        // The noise is based on the vertical position (y) and a time offset (noiseOffset)
+        let noiseVal = noise((y * noiseScale), noiseOffset);
+        // Map the noise value (from 0-1) to the desired amplitude range
+        let x = map(noiseVal, 0, 1, centerX - amplitude, centerX + amplitude);
+        // Add a vertex to the shape at the calculated x and current y
+        pg.vertex(x, y);
+      }
+      
+      // End the shape and draw the line
+      pg.endShape();
+
+      // Increment the noise offset to make the line move and change its wobble
+      noiseOffset += 0.01;
+
+}
+
+
 
 function handleOrientation(event) {
   rotationData.x = event.beta;
   rotationData.y = event.gamma;
   rotationData.z = event.alpha;
   dataReceived = true;
+
+
+}
+
+function mousePressed(){
+  drawBox();
+  console.log("press")
+}
+
+// orange, marine blue, red, grey, darkblue
+
+let boxColors =["#FFA500", "#0077BE", "#FF0000", "#808080", "#00008B"];
+
+
+function drawBox(){
+  print("click");
+  pg0.stroke(255);
+  pg0.fill(255);
+  // depending on shake strengh, draw multiple boxes#
+  // devide the hight in 10 possible segments and draw x amount of boxes depending on shake strength
+  let numSegments = 60;
+  let maxBoxes = 6;
+  let boxWidth = 25;
+  let segmentHeight = height / numSegments;
+  let numBoxes = floor(map(shakeStrength, 0, 1, 1, maxBoxes));
+
+  console.log("Number of boxes to draw: " + numBoxes);
+
+  for (let i = 0; i < numBoxes; i++) {
+    // random color from the color array
+    // the position should be random (segmentheight * random(0,numSegments))
+    let posY = segmentHeight * floor(random(numSegments));
+    // boxes x-pos should be in 40px steps. calculate the right x position. divide nr by 40
+    let posX = floor(nr / boxWidth) * boxWidth;
+
+
+    // decide randomly to draw the box on pg0 or pg
+    if (random() < 0.5) {
+      pg0.fill(boxColors[floor(random(boxColors.length))]);
+      pg0.noStroke();
+      pg0.rect(posX, posY, boxWidth, segmentHeight);
+    } else {
+      pg.noStroke();
+      pg.fill(boxColors[floor(random(boxColors.length))]);
+      pg.rect(posX, posY, boxWidth, segmentHeight);
+    }
+  }
 }
 
 function handleMotion(event) {
@@ -308,7 +442,15 @@ function updateData() {
     isShaken = true;
     lastShakeTime = currentTime;
     shakeHistory.push(lastShakeTime);
-    
+
+    // calculate shake strength
+    shakeStrength = map(abs(accelerationData.x), 0, SHAKE_THRESHOLD, 0, 1);
+    shakeStrength = constrain(shakeStrength, 0, 1);
+
+    console.log("Shake detected! Strength: " + shakeStrength);
+
+    drawBox();
+
     // Toggle shakeToggle if enough time has passed since last toggle
     if (currentTime - lastToggleTime > TOGGLE_COOLDOWN) {
       shakeToggle = !shakeToggle;
@@ -482,26 +624,7 @@ function touchStarted() {
         touchY <= toggleDataSourceButton.position().y + toggleDataSourceButton.size().height) {
       return; // Touched data source button, don't start dragging
     }
-    
-    // If we're in visualization mode and didn't touch a button, start dragging
-    if (displayMode !== "data") {
-      isDragging = true;
-      dragStartX = touchX;
-      lastDragX = touchX;
-      dragInertia = 0;
-      return false; // Prevent default
-    }
-  }
-}
-
-function touchMoved() {
-  if (isDragging && touches.length === 1) {
-    // Calculate how much to move the canvas
-    let dx = touches[0].x - lastDragX;
-    canvasOffset -= dx;
-    
-    // Make sure we don't scroll beyond the canvas bounds
-    canvasOffset = constrain(canvasOffset, 0, pg.width - width);
+  canvasOffset = constrain(canvasOffset, 0, pg.width - width);
     
     // Update the last position and calculate velocity for inertia
     dragInertia = touches[0].x - lastDragX;
@@ -513,6 +636,7 @@ function touchMoved() {
 
 function touchEnded() {
   isDragging = false;
+  // Autoscroll will resume in draw() when dragging ends
   return false; // Prevent default
 }
 
