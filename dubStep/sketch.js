@@ -19,7 +19,7 @@ let playbackIndex = 0;
 let useRecordedData = false; // Default to using recorded data
 
 const SHAKE_WINDOW = 3000; // Consider shakes in the last 3 seconds
-const SHAKE_THRESHOLD = 8; // Acceleration threshold for shake detection
+const SHAKE_THRESHOLD = 5; // Acceleration threshold for shake detection
 const SHAKE_TIMEOUT = 500; // Time in milliseconds to consider a shake "active"
 const TOGGLE_COOLDOWN = 6000; // Cooldown period for toggle (in milliseconds)
 
@@ -48,6 +48,7 @@ function setup() {
   toggleButton.style('color', 'white');
   toggleButton.style('border', 'none');
   toggleButton.style('border-radius', '4px');
+  toggleButton.style('display', 'none');
   toggleButton.mousePressed(toggleDisplayMode);
   
   // Toggle data source button
@@ -63,6 +64,7 @@ function setup() {
   toggleDataSourceButton.style('border', 'none');
   toggleDataSourceButton.style('border-radius', '4px');
   toggleDataSourceButton.style('width', buttonWidth + 'px');
+  toggleDataSourceButton.style('display', 'none');
   toggleDataSourceButton.mousePressed(toggleDataSource);
 }
 
@@ -305,7 +307,7 @@ function translateData(){
    amplitude = map( noiseAccY, - 4, 4, -300, 300);
 
 
-   let strWidth = map( noiseAccY, - 6, 6, -5, 5);
+   let strWidth = map( noiseAccY, - 6, 6, -4, 4);
    if (strWidth == 0) {
      strWidth = 0.25; // Set a minimum stroke width
      amplitude = 30;
